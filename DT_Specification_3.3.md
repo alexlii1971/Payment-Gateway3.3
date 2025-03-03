@@ -3,9 +3,9 @@
 
 ## 一、核心开发基准
 **技术栈要求：**
-- PHP 7.4+（严格类型声明）
-- WordPress 5.8+（多站点模式）
-- WooCommerce 5.5+（REST API v3）
+- PHP 8.0+（严格类型声明）
+- WordPress 6.7.2+（多站点模式）https://github.com/WordPress/WordPress/tags
+- WooCommerce 9.7+（REST API v3）https://github.com/woocommerce/woocommerce/releases
 - MySQL 8.0+（InnoDB引擎）
 
 **架构约束：**
