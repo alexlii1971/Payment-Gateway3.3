@@ -216,7 +216,7 @@ class WebhookSecurity {
 1. **事件驱动架构增强**：  
    - 使用 `WP_Queue` 实现异步任务处理（如延迟重试 Webhook）。  
 2. **支付网关抽象层**：  
-   - 定义 `PaymentGateway` 接口，便于扩展 Stripe/PayPal。  
+   - 定义 `PaymentGateway` 接口
 3. **自动化测试覆盖**：  
    - 基于 PHPUnit 构建测试用例，覆盖核心支付流程。  
 
