@@ -1,12 +1,11 @@
-
 # WooCommerce多站点支付优化项目开发规范（增强版）
 
 ## 一、核心开发基准
 **技术栈要求：**
-- PHP 8.0+（严格类型声明）
-- WordPress 6.7.2+（多站点模式）https://github.com/WordPress/WordPress/tags
-- WooCommerce 9.7+（REST API v3）https://github.com/woocommerce/woocommerce/releases
-- MySQL 8.0+（InnoDB引擎）
+- PHP 8.0+（严格类型声明，需添加 `declare(strict_types=1)`）
+- WordPress 6.7.2+（多站点模式，需验证子域名/子目录兼容性）https://github.com/WordPress/WordPress/tags
+- WooCommerce 9.7+（REST API v3，适配 `WC_Webhook::set_delivery_url()`）https://github.com/woocommerce/woocommerce/releases
+- MariaDB 10.0+（InnoDB引擎，强制 `_site_id` 字段索引）
 
 **架构约束：**
 ```text
@@ -18,9 +17,13 @@
 ▢ 多站点结算服务（独立数据库表）
 ```
 
+**SDK 集成要求：**
+所有支付集成功能必须使用官方 SDK 进行开发，不得直接调用 API。
+- **微信支付：** 使用 `wechatpay-php`（https://github.com/wechatpay-apiv3/wechatpay-php）
+- **支付宝支付：** 使用 `alipay-sdk-php`（https://github.com/alipay/alipay-sdk-php-all）
+
 ## 二、开发流程规范
 ### 文件生成流程
-
 ```mermaid
 graph TD
     A["生成目录结构v1.0"] --> B{"文件队列"}
@@ -38,20 +41,12 @@ graph TD
     K --> L
 ```
 
-    
-### 质量控制矩阵
-| 检测阶段 | 检测项 | 执行方式 |
-|---------|--------|---------|
-| 生成前   | 1. 命名规范检查<br>2. 钩子冲突扫描<br>3. SQL注入预防 | 静态分析 |
-| 生成中   | 1. 上下文一致性<br>2. 版本依赖解析 | 动态追踪 |
-| 生成后   | 1. 跨文件影响评估<br>2. 性能基线测试 | 模拟沙盒 |
-
 ## 三、异常熔断机制
 **立即中止的情形（示例）：**
 ```php
 // 危险模式检测
 if (
-    function_exists('wc_get_payment_gateways') && 
+    function_exists('wc_get_payment_gateways') &&
     !has_filter('woocommerce_payment_gateways')
 ) {
     throw new MultisitePaymentException(
@@ -70,51 +65,49 @@ if (
    1) 类/接口定义结束
    2) 方法结束
    3) 闭合标签前
-
-[标记格式]
-// ====== FILE: class-payment-controller.php (v1.2.3) PART 1/3 ======
-...代码内容...
-// ====== END PART 1/3 - 回复"CONTINUE_2345"获取下段 ======
 ```
 
 ## 五、版本控制体系
 **三元版本号规则：**
 ```text
 主版本.特性版本.修订版本（例：2.1.15）
-更新逻辑：
-- 目录结构调整 ⇒ 主版本+1
-- 新增功能文件 ⇒ 特性版本+1 
-- 代码优化/修正 ⇒ 修订版本+1
-
-版本清单示例：
-├── v2.0 (目录基准版本)
-│   ├── payment-gateway/v2.1.5
-│   ├── refund-service/v1.0.2
-│   └── multisite-db/v1.3.7
 ```
 
 ## 六、特别安全条款
 **必须包含的防御措施：**
-1. 跨站请求伪造（CSRF）防御：
+1. **跨站请求伪造（CSRF）防御：**
    ```php
    add_action('wc_ajax_custom_refund', function() {
        check_ajax_referer('multisite-refund-nonce', 'security');
-       // 业务逻辑
    });
    ```
-2. 多站点数据隔离：
+2. **多站点数据隔离：**
    ```sql
-   /* 所有自定义表必须包含blog_id字段 */
    CREATE TABLE wp_multisite_payments (
        blog_id BIGINT(20) NOT NULL,
        payment_id VARCHAR(36) NOT NULL,
        INDEX blog_payment_idx (blog_id, payment_id)
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
    ```
+3. **动态IP白名单：**  
+   ```php
+   // 定期拉取微信/支付宝官方IP段
+   $wechat_ips = wp_remote_get('https://api.mch.weixin.qq.com/risk/getprotectedip');
+   if (!in_array($_SERVER['REMOTE_ADDR'], json_decode($wechat_ips))) {
+       wp_die("非法IP来源", 403);
+   }
+   ```
+
+4. **密钥加密存储：**  
+   ```php
+   // 使用 WordPress Salt 动态加密
+   $encrypted_key = openssl_encrypt($raw_key, 'AES-256-CBC', wp_salt());
+   update_network_option(null, 'wechat_api_key', $encrypted_key);
+   ```
 
 ## 七、性能保障承诺
 **资源消耗上限：**
-| 指标 | 普通请求 | 管理后台 | 
+| 指标 | 普通请求 | 管理后台 |
 |------|---------|---------|
 | 内存峰值 | ≤32MB | ≤64MB |
 | SQL查询数 | ≤12次 | ≤25次 |
